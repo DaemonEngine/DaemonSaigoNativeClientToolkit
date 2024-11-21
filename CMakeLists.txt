@@ -116,7 +116,7 @@ if (BUILD_BINUTILS)
 		GIT_TAG main
 		CONFIGURE_COMMAND ${sourceFullDir}/configure
 		CONFIGURE_COMMAND LD=lld
-		CONFIGURE_COMMAND "CC=${CCACHE_CMD} ${CMAKE_C_COMPILER} -Qunused-arguments"
+		CONFIGURE_COMMAND "CC=${CCACHE_CMD} ${CMAKE_C_COMPILER}"
 		CONFIGURE_COMMAND "CFLAGS=${COMPILER_FLAGS} -Wno-absolute-value -Wno-unused-function -Wno-unused-const-variable -Wno-unneeded-internal-declaration -Wno-unused-private-field -Wno-format-security"
 		# CONFIGURE_COMMAND "LDFLAGS=-fuse-ld=lld -static-libstdc++ -static-libgcc"
 		CONFIGURE_COMMAND "LDFLAGS=-static-libstdc++ -static-libgcc"
