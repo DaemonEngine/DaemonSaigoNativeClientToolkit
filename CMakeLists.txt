@@ -17,6 +17,7 @@ set(COMPILER_FLAGS "-O3")
 
 option(USE_LTO "Enable link-time optimization." OFF)
 option(USE_CCACHE "Enable cached compilation." ON)
+option(USE_SYMLINKS "Use symlinks instead of copying binaries" ${CMAKE_HOST_UNIX})
 
 if (USE_LTO)
 	set(CONFIGURE_ARG_LTO --enable-lto)
@@ -35,31 +36,101 @@ set(GIT_REPOSITORY_BINUTILS "https://chromium.googlesource.com/native_client/nac
 mark_as_advanced(GIT_REPOSITORY_CLANG)
 mark_as_advanced(GIT_REPOSITORY_BINUTILS)
 
-set(ARCH_PREFIXES x86_64;i686;arm)
+set(REFERENCE_ARCH_NAME x86_64)
+set(ALIAS_ARCH_NAMES i686;arm)
 
 set(EXTERNAL_PROJECT_BASE ExternalProjects)
 set(EXTERNAL_PROJECT_SOURCES_DIR ${EXTERNAL_PROJECT_BASE}/Sources)
 
 set_directory_properties(PROPERTIES EP_BASE ${CMAKE_CURRENT_BINARY_DIR}/${EXTERNAL_PROJECT_BASE})
 
-macro(AddAliases targetName toolNames)
+macro(AddBinaries targetName)
 	add_custom_target(${targetName} ALL)
+	add_dependencies(${targetName} ${targetName}-binaries)
+endmacro()
+
+macro(RenameBinaryAliases targetName toolNames)
+	add_custom_target(${targetName}-renames ALL)
+	add_dependencies(${targetName} ${targetName}-renames)
+	add_dependencies(${targetName} ${targetName}-renames ${targetName}-binaries)
+
+	set(targetPath ${CMAKE_INSTALL_PREFIX}/bin/${targetName})
+	set(referenceName ${targetName}-reference)
+	set(referencePath ${EXTERNAL_PROJECT_BASE}/tmp/${referenceName})
+
+	add_custom_target(${referenceName}
+		ALL
+		COMMAND cp -P ${targetPath} ${referencePath}
+		DEPENDS ${targetName}-binaries
+	)
+
+	add_dependencies(${targetName} ${referenceName})
+
+	foreach(toolName ${toolNames})
+		set(aliasName ${REFERENCE_ARCH_NAME}-nacl-${toolName})
+		set(aliasPath ${CMAKE_INSTALL_PREFIX}/bin/${aliasName})
+
+		add_custom_target(${aliasName}
+			ALL
+			COMMAND cp -P ${referencePath} ${aliasPath}
+			DEPENDS ${referenceName}
+		)
+
+		add_dependencies(${targetName}-renames ${aliasName})
+
+		set(deleteName ${toolName}-delete)
+		set(deleteFullPath ${CMAKE_INSTALL_PREFIX}/bin/${toolName})
+
+		add_custom_target(${deleteName}
+			ALL
+			COMMAND rm -f ${deleteFullPath}
+			DEPENDS ${toolFullName}
+		)
+
+		add_dependencies(${targetName}-renames ${deleteName})
+	endforeach()
+endmacro()
+
+macro(AddBinaryAliases targetName toolNames)
+	set(targetAliases ${targetName}-aliases)
 	add_custom_target(${targetName}-aliases ALL)
+	add_dependencies(${targetName} ${targetName}-aliases)
+	add_dependencies(${targetName}-aliases ${targetName}-binaries)
 
-	add_dependencies(${targetName} ${targetName}-binaries ${targetName}-aliases)
-
-	foreach(archPrefix ${ARCH_PREFIXES})
+	foreach(archName ${ALIAS_ARCH_NAMES})
 		foreach(toolName ${toolNames})
-			set(toolFullName ${archPrefix}-nacl-${toolName})
+			set(referenceName ${REFERENCE_ARCH_NAME}-nacl-${toolName})
+			set(aliasName ${archName}-nacl-${toolName})
+			set(aliasPath ${CMAKE_INSTALL_PREFIX}/bin/${aliasName})
 
-			add_custom_target(${toolFullName}
+			add_custom_target(${aliasName}
 				ALL
-				COMMAND ln -sf ${toolName} ${CMAKE_INSTALL_PREFIX}/bin/${toolFullName}
+				COMMAND ln -sf ${referenceName} ${aliasPath}
 				DEPENDS ${targetName}-binaries
 			)
 
-			add_dependencies(${targetName}-aliases ${toolFullName})
+			add_dependencies(${targetName}-aliases ${aliasName})
 		endforeach()
+	endforeach()
+endmacro()
+
+macro(AddDirectoryAliases targetName)
+	add_custom_target(${targetName}-directory-aliases ALL)
+	add_dependencies(${targetName} ${targetName}-directory-aliases)
+	add_dependencies(${targetName}-directory-aliases ${targetName}-binaries)
+
+	foreach(archName ${ALIAS_ARCH_NAMES})
+		set(referenceName ${REFERENCE_ARCH_NAME}-nacl)
+		set(aliasName ${archName}-nacl)
+		set(aliasPath ${CMAKE_INSTALL_PREFIX}/${aliasName})
+
+		add_custom_target(${aliasName}
+			ALL
+			COMMAND ln -sf ${referenceName} ${aliasPath}
+			DEPENDS ${targetName}-binaries
+		)
+
+		add_dependencies(${targetName}-directory-aliases ${aliasName})
 	endforeach()
 endmacro()
 
@@ -88,6 +159,7 @@ if (BUILD_CLANG)
 		CMAKE_ARGS -DLLVM_ENABLE_LIBXML2=OFF
 		CMAKE_ARGS "-DLLVM_TARGETS_TO_BUILD=X86;ARM"
 		CMAKE_ARGS -DLLVM_ENABLE_PROJECTS=clang
+		CMAKE_ARGS -DLLVM_DEFAULT_TARGET_TRIPLE=x86_64-nacl
 		CMAKE_ARGS -DLLVM_BUILD_LLVM_DYLIB=OFF
 		CMAKE_ARGS -DLLVM_LINK_LLVM_DYLIB=OFF
 		CMAKE_ARGS -DCLANG_LINK_CLANG_DYLIB=OFF
@@ -100,11 +172,13 @@ if (BUILD_CLANG)
 		CMAKE_ARGS -DLLVM_CCACHE_BUILD=${USE_CCACHE}
 		INSTALL_COMMAND ${CMAKE_COMMAND} --install . --strip
 	)
+
+	set(clangToolNames clang;clang++)
+
+	AddBinaries(clang)
+	RenameBinaryAliases(clang "${clangToolNames}")
+	AddBinaryAliases(clang "${clangToolNames}")
 endif()
-
-set(CLANG_TOOL_NAMES clang;clang++)
-
-AddAliases(clang "${CLANG_TOOL_NAMES}")
 
 if (BUILD_BINUTILS)
 	set(sourceDir ${EXTERNAL_PROJECT_SOURCES_DIR}/binutils)
@@ -122,6 +196,7 @@ if (BUILD_BINUTILS)
 		CONFIGURE_COMMAND "LDFLAGS=-static-libstdc++ -static-libgcc"
 		CONFIGURE_COMMAND ${CONFIGURE_ARG_LTO}
 		CONFIGURE_COMMAND --prefix=
+		CONFIGURE_COMMAND --target=x86_64-nacl
 		CONFIGURE_COMMAND --enable-targets=x86_64-nacl,i686-nacl,arm-nacl
 		# CONFIGURE_COMMAND --enable-gold --enable-plugins --disable-shared
 		CONFIGURE_COMMAND --disable-gold
@@ -133,8 +208,10 @@ if (BUILD_BINUTILS)
 		INSTALL_COMMAND $(MAKE) MAKEINFO=true install-strip
 		INSTALL_COMMAND DESTDIR=${CMAKE_INSTALL_PREFIX}
 	)
+
+	set(binutilsToolNames addr2line;ar;as;c++filt;elfedit;gprof;nm;objcopy;objdump;ranlib;readelf;size;strings;strip;ld;ld.bfd) # ld.gold
+
+	AddBinaries(binutils)
+	AddBinaryAliases(binutils "${binutilsToolNames}")
+	AddDirectoryAliases(binutils)
 endif()
-
-set(BINUTILS_TOOL_NAMES addr2line;ar;as;c++filt;elfedit;gprof;nm;objcopy;objdump;ranlib;readelf;size;strings;strip;ld;ld.bfd) # ld.gold
-
-AddAliases(binutils "${BINUTILS_TOOL_NAMES}")
