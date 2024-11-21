@@ -44,11 +44,6 @@ set(EXTERNAL_PROJECT_SOURCES_DIR ${EXTERNAL_PROJECT_BASE}/Sources)
 
 set_directory_properties(PROPERTIES EP_BASE ${CMAKE_CURRENT_BINARY_DIR}/${EXTERNAL_PROJECT_BASE})
 
-macro(AddBinaries targetName)
-	add_custom_target(${targetName} ALL)
-	add_dependencies(${targetName} ${targetName}-binaries)
-endmacro()
-
 macro(RenameBinaryAliases targetName toolNames)
 	add_custom_target(${targetName}-renames ALL)
 	add_dependencies(${targetName} ${targetName}-renames)
@@ -114,27 +109,74 @@ macro(AddBinaryAliases targetName toolNames)
 	endforeach()
 endmacro()
 
-macro(AddDirectoryAliases targetName)
+macro(AddDirectoryAliases targetName toolNames)
 	add_custom_target(${targetName}-directory-aliases ALL)
 	add_dependencies(${targetName} ${targetName}-directory-aliases)
 	add_dependencies(${targetName}-directory-aliases ${targetName}-binaries)
 
+	set(referenceName ${REFERENCE_ARCH_NAME}-nacl)
+
 	foreach(archName ${ALIAS_ARCH_NAMES})
-		set(referenceName ${REFERENCE_ARCH_NAME}-nacl)
 		set(aliasName ${archName}-nacl)
 		set(aliasPath ${CMAKE_INSTALL_PREFIX}/${aliasName})
 
-		add_custom_target(${aliasName}
+		add_custom_target(${aliasName}-directory
 			ALL
-			COMMAND ln -sf ${referenceName} ${aliasPath}
+			COMMAND mkdir -p ${aliasPath}
 			DEPENDS ${targetName}-binaries
 		)
 
-		add_dependencies(${targetName}-directory-aliases ${aliasName})
+		add_dependencies(${targetName}-directory-aliases ${aliasName}-directory)
+
+		add_custom_target(${aliasName}-bin-directory
+			ALL
+			COMMAND ln -sfT ../${referenceName}/bin ${aliasPath}/bin
+			DEPENDS ${aliasName}-directory
+		)
+
+		add_dependencies(${targetName}-directory-aliases ${aliasName}-bin-directory)
+
+		add_custom_target(${aliasName}-lib-directory
+			ALL
+			COMMAND mkdir -p ${aliasPath}/lib
+			DEPENDS ${aliasName}-directory
+		)
+
+		add_dependencies(${targetName}-directory-aliases ${aliasName}-lib-directory)
+
+		add_custom_target(${aliasName}-ldscripts-directory
+			ALL
+			COMMAND ln -sfT ../../${referenceName}/lib/ldscripts ${aliasPath}/lib/ldscripts
+			DEPENDS ${aliasName}-lib-directory
+		)
+
+		add_dependencies(${targetName}-directory-aliases ${aliasName}-ldscripts-directory)
+	endforeach()
+
+	foreach(toolName ${toolNames})
+		set(toolPath ${CMAKE_INSTALL_PREFIX}/${referenceName}/bin/${toolName})
+
+		add_custom_target(${targetName}-${toolName}-delete
+			ALL
+			COMMAND rm -f ${toolPath}
+			DEPENDS ${targetName}-binaries
+		)
+
+		add_dependencies(${targetName}-directory-aliases ${targetName}-${toolName}-delete)
+
+		add_custom_target(${targetName}-${toolName}-alias
+			ALL
+			COMMAND ln -sf ../../bin/${referenceName}-${toolName} ${toolPath}
+			DEPENDS ${targetName}-${toolName}-delete
+		)
+
+		add_dependencies(${targetName}-directory-aliases ${targetName}-${toolName}-alias)
 	endforeach()
 endmacro()
 
 if (BUILD_CLANG)
+	add_custom_target(clang ALL)
+
 	set(sourceDir ${EXTERNAL_PROJECT_SOURCES_DIR}/llvm-project)
 
 	ExternalProject_Add(clang-binaries
@@ -175,12 +217,13 @@ if (BUILD_CLANG)
 
 	set(clangToolNames clang;clang++)
 
-	AddBinaries(clang)
 	RenameBinaryAliases(clang "${clangToolNames}")
 	AddBinaryAliases(clang "${clangToolNames}")
 endif()
 
 if (BUILD_BINUTILS)
+	add_custom_target(binutils ALL)
+
 	set(sourceDir ${EXTERNAL_PROJECT_SOURCES_DIR}/binutils)
 	set(sourceFullDir ${CMAKE_CURRENT_BINARY_DIR}/${sourceDir})
 
@@ -210,8 +253,8 @@ if (BUILD_BINUTILS)
 	)
 
 	set(binutilsToolNames addr2line;ar;as;c++filt;elfedit;gprof;nm;objcopy;objdump;ranlib;readelf;size;strings;strip;ld;ld.bfd) # ld.gold
+	set(binutilsDirectoryToolNames ar;as;ld;ld.bfd;nm;objcopy;objdump;ranlib;strip) # ld.gold
 
-	AddBinaries(binutils)
 	AddBinaryAliases(binutils "${binutilsToolNames}")
-	AddDirectoryAliases(binutils)
+	AddDirectoryAliases(binutils "${binutilsDirectoryToolNames}")
 endif()
