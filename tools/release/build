@@ -1,0 +1,66 @@
+#! /usr/bin/env bash
+
+set -e -u
+
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
+repo_dir="$(git rev-parse --show-toplevel)"
+
+export CMAKE_BUILD_PARALLEL_LEVEL="$("${script_dir}/nproc")"
+
+for target_name in "${@}"
+do
+	conf_file="${script_dir}/conf/${target_name}.conf"
+	if [ ! -f "${conf_file}" ]
+	then
+		echo "WARN: missing ${target_name} configuration" >&2
+		continue
+	fi
+
+	cmake_args=(-S "${repo_dir}" -G'Unix Makefiles')
+
+	shared_dir="${repo_dir}/build/shared"
+
+	if [ ! -d "${shared_dir}" ]
+	then
+		cmake -B "${shared_dir}" "${cmake_args[@]}" -D'CLONE_SHARED_REPOSITORIES'='ON'
+		cmake --build "${shared_dir}"
+	fi
+
+	cmake_args+=(-D'SHARED_REPOSITORIES_DIR'="${shared_dir}")
+
+	. "${conf_file}"
+
+	if [ -n "${TOOLCHAIN:-}" ]
+	then
+		cmake_args+=(-D'CMAKE_TOOLCHAIN_FILE'="${repo_dir}/cmake/${TOOLCHAIN}")
+	fi
+		
+	if [ -n "${GCC:-}" ]
+	then
+		cmake_args+=(-D'CMAKE_C_COMPILER'="${GCC}-gcc")
+		cmake_args+=(-D'CMAKE_CXX_COMPILER'="${GCC}-g++")
+	fi
+		
+	if [ -n "${CLANG:-}" ]
+	then
+		cmake_args+=(-D'CMAKE_C_COMPILER'='clang')
+		cmake_args+=(-D'CMAKE_CXX_COMPILER'='clang++')
+		cmake_args+=(-D'CMAKE_C_FLAGS'="-target ${CLANG}")
+		cmake_args+=(-D'CMAKE_CXX_FLAGS'="-target ${CLANG}")
+	fi
+
+	if [ -n "${MACOS:-}" ]
+	then
+		cmake_args+=(-D'CMAKE_OSX_DEPLOYMENT_TARGET'="${MACOS}")
+	fi
+
+	unset TOOLCHAIN
+	unset GCC
+	unset CLANG
+	unset MACOS
+
+	build_dir="${repo_dir}/build/${target_name}"
+
+	cmake -B "${build_dir}" "${cmake_args[@]}"
+	cmake --build "${build_dir}"
+done
