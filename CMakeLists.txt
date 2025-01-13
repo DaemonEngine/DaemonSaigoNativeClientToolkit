@@ -299,6 +299,7 @@ if (BUILD_BINUTILS)
 		GIT_REPOSITORY "${REPOSITORY_BINUTILS}"
 		GIT_TAG "${REPOSITORY_TAG_BINUTILS}"
 		CONFIGURE_COMMAND "${CMAKE_CURRENT_BINARY_DIR}/${SOURCE_DIR_BINUTILS}/configure"
+		CONFIGURE_COMMAND "MAKEINFO=true"
 		CONFIGURE_COMMAND "CC=${CONFIGURE_CC}"
 		CONFIGURE_COMMAND "CFLAGS=${COMPILER_FLAGS} -Wno-absolute-value -Wno-unused-function -Wno-unused-const-variable -Wno-unneeded-internal-declaration -Wno-unused-private-field -Wno-format-security"
 		CONFIGURE_COMMAND "LDFLAGS=${LINKER_FLAGS} -static-libstdc++ -static-libgcc"
