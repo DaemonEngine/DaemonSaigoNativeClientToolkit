@@ -1,7 +1,7 @@
 # Author: Thomas Debesse
 # License: CC0 1.0
 
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.10)
 
 include(${CMAKE_ROOT}/Modules/ExternalProject.cmake)
 
@@ -228,6 +228,10 @@ endmacro()
 if (BUILD_CLANG)
 	add_custom_target(clang ALL)
 
+	if (CMAKE_OSX_DEPLOYMENT_TARGET)
+		set(CMAKE_EXTRA_ARGS "-DCMAKE_OSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET}")
+	endif()
+
 	ExternalProject_Add(clang-binaries
 		SOURCE_DIR ${SOURCE_DIR_CLANG}
 		GIT_REPOSITORY ${REPOSITORY_CLANG}
@@ -262,6 +266,7 @@ if (BUILD_CLANG)
 		CMAKE_ARGS -DCLANG_INCLUDE_TESTS=OFF
 		CMAKE_ARGS -DLLVM_ENABLE_LTO=${USE_LTO}
 		CMAKE_ARGS -DLLVM_CCACHE_BUILD=${USE_CCACHE}
+		CMAKE_ARGS ${CMAKE_EXTRA_ARGS}
 		INSTALL_COMMAND ${CMAKE_COMMAND} --install . --strip
 	)
 
@@ -282,6 +287,10 @@ if (BUILD_BINUTILS)
 		set(CONFIGURE_CC "${CCACHE_CMD} ${CMAKE_C_COMPILER}")
 	else()
 		set(CONFIGURE_CC "${CMAKE_C_COMPILER}")
+	endif()
+
+	if (CMAKE_OSX_DEPLOYMENT_TARGET)
+		set(COMPILER_FLAGS ${COMPILER_FLAGS} -mmacosx-version-min=${CMAKE_OSX_DEPLOYMENT_TARGET})
 	endif()
 
 	ExternalProject_Add(binutils-binaries
