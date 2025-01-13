@@ -100,9 +100,9 @@ macro(RenameBinaryAliases targetName toolNames)
 	add_dependencies(${targetName} ${targetName}-renames)
 	add_dependencies(${targetName} ${targetName}-renames ${targetName}-binaries)
 
-	set(targetPath ${CMAKE_INSTALL_PREFIX}/bin/${targetName})
+	set(targetPath ${CMAKE_INSTALL_PREFIX}/bin/${targetName}${CMAKE_EXECUTABLE_SUFFIX})
 	set(referenceName ${targetName}-reference)
-	set(referencePath ${EXTERNAL_PROJECT_BASE}/tmp/${referenceName})
+	set(referencePath ${EXTERNAL_PROJECT_BASE}/tmp/${referenceName}${CMAKE_EXECUTABLE_SUFFIX})
 
 	add_custom_target(${referenceName}
 		ALL
@@ -114,7 +114,7 @@ macro(RenameBinaryAliases targetName toolNames)
 
 	foreach(toolName ${toolNames})
 		set(aliasName ${REFERENCE_ARCH_NAME}-nacl-${toolName})
-		set(aliasPath ${CMAKE_INSTALL_PREFIX}/bin/${aliasName})
+		set(aliasPath ${CMAKE_INSTALL_PREFIX}/bin/${aliasName}${CMAKE_EXECUTABLE_SUFFIX})
 
 		add_custom_target(${aliasName}
 			ALL
@@ -125,7 +125,7 @@ macro(RenameBinaryAliases targetName toolNames)
 		add_dependencies(${targetName}-renames ${aliasName})
 
 		set(deleteName ${toolName}-delete)
-		set(deleteFullPath ${CMAKE_INSTALL_PREFIX}/bin/${toolName})
+		set(deleteFullPath ${CMAKE_INSTALL_PREFIX}/bin/${toolName}${CMAKE_EXECUTABLE_SUFFIX})
 
 		add_custom_target(${deleteName}
 			ALL
@@ -145,9 +145,9 @@ macro(AddBinaryAliases targetName toolNames)
 
 	foreach(archName ${ALIAS_ARCH_NAMES})
 		foreach(toolName ${toolNames})
-			set(referenceName ${REFERENCE_ARCH_NAME}-nacl-${toolName})
+			set(referenceName ${REFERENCE_ARCH_NAME}-nacl-${toolName}${CMAKE_EXECUTABLE_SUFFIX})
 			set(aliasName ${archName}-nacl-${toolName})
-			set(aliasPath ${CMAKE_INSTALL_PREFIX}/bin/${aliasName})
+			set(aliasPath ${CMAKE_INSTALL_PREFIX}/bin/${aliasName}${CMAKE_EXECUTABLE_SUFFIX})
 
 			add_custom_target(${aliasName}
 				ALL
@@ -233,6 +233,7 @@ if (BUILD_CLANG)
 		GIT_REPOSITORY ${REPOSITORY_CLANG}
 		GIT_TAG ${REPOSITORY_TAG_CLANG}
 		SOURCE_SUBDIR llvm
+		CMAKE_ARGS -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
 		CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
 		CMAKE_ARGS -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
 		CMAKE_ARGS -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}
@@ -273,19 +274,28 @@ endif()
 if (BUILD_BINUTILS)
 	add_custom_target(binutils ALL)
 
+	if (CONFIGURE_HOST)
+		set(CONFIGURE_ARG_HOST --host=${CONFIGURE_HOST})
+	endif()
+
+	if (USE_CCACHE)
+		set(CONFIGURE_CC "${CCACHE_CMD} ${CMAKE_C_COMPILER}")
+	else()
+		set(CONFIGURE_CC "${CMAKE_C_COMPILER}")
+	endif()
+
 	ExternalProject_Add(binutils-binaries
 		SOURCE_DIR ${SOURCE_DIR_BINUTILS}
 		GIT_REPOSITORY ${REPOSITORY_BINUTILS}
 		GIT_TAG ${REPOSITORY_TAG_BINUTILS}
 		CONFIGURE_COMMAND ${CMAKE_CURRENT_BINARY_DIR}/${SOURCE_DIR_BINUTILS}/configure
-		CONFIGURE_COMMAND LD=lld
-		CONFIGURE_COMMAND "CC=${CCACHE_CMD} ${CMAKE_C_COMPILER}"
+		CONFIGURE_COMMAND "CC=${CONFIGURE_CC}"
 		CONFIGURE_COMMAND "CFLAGS=${COMPILER_FLAGS} -Wno-absolute-value -Wno-unused-function -Wno-unused-const-variable -Wno-unneeded-internal-declaration -Wno-unused-private-field -Wno-format-security"
-		# CONFIGURE_COMMAND "LDFLAGS=-fuse-ld=lld -static-libstdc++ -static-libgcc"
 		CONFIGURE_COMMAND "LDFLAGS=-static-libstdc++ -static-libgcc"
 		CONFIGURE_COMMAND ${CONFIGURE_ARG_LTO}
 		CONFIGURE_COMMAND --prefix=
 		CONFIGURE_COMMAND --target=x86_64-nacl
+		CONFIGURE_COMMAND ${CONFIGURE_ARG_HOST}
 		CONFIGURE_COMMAND --enable-targets=x86_64-nacl,i686-nacl,arm-nacl
 		# CONFIGURE_COMMAND --enable-gold --enable-plugins --disable-shared
 		CONFIGURE_COMMAND --disable-gold
@@ -294,7 +304,8 @@ if (BUILD_BINUTILS)
 		CONFIGURE_COMMAND --disable-silent-rules
 		CONFIGURE_COMMAND --enable-deterministic-archives
 		BUILD_COMMAND $(MAKE) MAKEINFO=true
-		INSTALL_COMMAND $(MAKE) MAKEINFO=true install-strip
+		INSTALL_COMMAND $(MAKE) MAKEINFO=true
+		INSTALL_COMMAND install-strip
 		INSTALL_COMMAND DESTDIR=${CMAKE_INSTALL_PREFIX}
 	)
 
