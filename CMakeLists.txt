@@ -27,22 +27,73 @@ if (USE_CCACHE)
 	set(CCACHE_CMD "ccache")
 endif()
 
-option(BUILD_CLANG "Build the NaCl Saigo clang compiler." ON)
-option(BUILD_BINUTILS "Build the NaCl binutils." ON)
+option(CLONE_SHARED_REPOSITORIES "Clone shared sources dir (and only do that)." OFF)
 
-set(GIT_REPOSITORY_CLANG "https://chromium.googlesource.com/native_client/nacl-llvm-project-v10.git" CACHE STRING "Git repository location.")
-set(GIT_REPOSITORY_BINUTILS "https://chromium.googlesource.com/native_client/nacl-binutils.git" CACHE STRING "Git repository location.")
+if (CLONE_SHARED_REPOSITORIES)
+	set(DEFAULT_SHARED_REPOSITORIES ${CMAKE_CURRENT_BINARY_DIR})
+else()
+	set(DEFAULT_SHARED_REPOSITORIES "")
+endif()
 
-mark_as_advanced(GIT_REPOSITORY_CLANG)
-mark_as_advanced(GIT_REPOSITORY_BINUTILS)
+set(SHARED_REPOSITORIES_DIR ${DEFAULT_SHARED_REPOSITORIES_DIR} CACHE PATH "Shared repositories dir (doesn't use any if empty).")
+
+set(EXTERNAL_PROJECT_BASE ExternalProjects)
+set_directory_properties(PROPERTIES EP_BASE ${CMAKE_CURRENT_BINARY_DIR}/${EXTERNAL_PROJECT_BASE})
+
+if (CLONE_SHARED_REPOSITORIES)
+	set(EXTERNAL_PROJECT_SOURCES_DIR ${CMAKE_BINARY_DIR})
+else()
+	set(EXTERNAL_PROJECT_SOURCES_DIR ${EXTERNAL_PROJECT_BASE}/Sources)
+endif()
+
+macro(AddProject SLUG NAME DIR URL TAG)
+	set(GIT_REPOSITORY_${SLUG} ${URL} CACHE STRING "${NAME} git repository location.")
+	mark_as_advanced(GIT_REPOSITORY_${SLANG})
+
+	set(REPOSITORY_DIR_${SLUG} ${DIR})
+	set(REPOSITORY_TAG_${SLUG} ${TAG})
+
+	if (SHARED_REPOSITORIES_DIR)
+		set(REPOSITORY_${SLUG} ${SHARED_REPOSITORIES_DIR}/${DIR})
+	else()
+		set(REPOSITORY_${SLUG} ${GIT_REPOSITORY_${SLUG}})
+	endif()
+
+	set(SOURCE_DIR_${SLUG} ${EXTERNAL_PROJECT_SOURCES_DIR}/${DIR})
+
+	if (CLONE_SHARED_REPOSITORIES)
+		option(CLONE_${SLUG} "Clone the ${NAME} repository." ON)
+
+		if (CLONE_${SLUG})
+			ExternalProject_Add(${REPOSITORY_DIR_${SLUG}}-shared-repository
+				SOURCE_DIR ${DIR}
+				GIT_REPOSITORY ${GIT_REPOSITORY_${SLUG}}
+				GIT_TAG ${TAG}
+				CONFIGURE_COMMAND echo
+				BUILD_COMMAND echo
+				INSTALL_COMMAND echo
+			)
+		endif()
+	else()
+		option(BUILD_${SLUG} "Build the ${NAME}." ON)
+	endif()
+endmacro()
+
+AddProject("CLANG"
+	"NaCl Saigo clang compiler"
+	"llvm-project"
+	"https://chromium.googlesource.com/native_client/nacl-llvm-project-v10.git"
+	"main"
+)
+AddProject("BINUTILS"
+	"NaCl binutils"
+	"binutils"
+	"https://chromium.googlesource.com/native_client/nacl-binutils.git"
+	"main"
+)
 
 set(REFERENCE_ARCH_NAME x86_64)
 set(ALIAS_ARCH_NAMES i686;arm)
-
-set(EXTERNAL_PROJECT_BASE ExternalProjects)
-set(EXTERNAL_PROJECT_SOURCES_DIR ${EXTERNAL_PROJECT_BASE}/Sources)
-
-set_directory_properties(PROPERTIES EP_BASE ${CMAKE_CURRENT_BINARY_DIR}/${EXTERNAL_PROJECT_BASE})
 
 macro(RenameBinaryAliases targetName toolNames)
 	add_custom_target(${targetName}-renames ALL)
@@ -177,12 +228,10 @@ endmacro()
 if (BUILD_CLANG)
 	add_custom_target(clang ALL)
 
-	set(sourceDir ${EXTERNAL_PROJECT_SOURCES_DIR}/llvm-project)
-
 	ExternalProject_Add(clang-binaries
-		SOURCE_DIR ${sourceDir}
-		GIT_REPOSITORY ${GIT_REPOSITORY_CLANG}
-		GIT_TAG main
+		SOURCE_DIR ${SOURCE_DIR_CLANG}
+		GIT_REPOSITORY ${REPOSITORY_CLANG}
+		GIT_TAG ${REPOSITORY_TAG_CLANG}
 		SOURCE_SUBDIR llvm
 		CMAKE_ARGS -DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}
 		CMAKE_ARGS -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
@@ -224,14 +273,11 @@ endif()
 if (BUILD_BINUTILS)
 	add_custom_target(binutils ALL)
 
-	set(sourceDir ${EXTERNAL_PROJECT_SOURCES_DIR}/binutils)
-	set(sourceFullDir ${CMAKE_CURRENT_BINARY_DIR}/${sourceDir})
-
 	ExternalProject_Add(binutils-binaries
-		SOURCE_DIR ${sourceDir}
-		GIT_REPOSITORY ${GIT_REPOSITORY_BINUTILS}
-		GIT_TAG main
-		CONFIGURE_COMMAND ${sourceFullDir}/configure
+		SOURCE_DIR ${SOURCE_DIR_BINUTILS}
+		GIT_REPOSITORY ${REPOSITORY_BINUTILS}
+		GIT_TAG ${REPOSITORY_TAG_BINUTILS}
+		CONFIGURE_COMMAND ${CMAKE_CURRENT_BINARY_DIR}/${SOURCE_DIR_BINUTILS}/configure
 		CONFIGURE_COMMAND LD=lld
 		CONFIGURE_COMMAND "CC=${CCACHE_CMD} ${CMAKE_C_COMPILER}"
 		CONFIGURE_COMMAND "CFLAGS=${COMPILER_FLAGS} -Wno-absolute-value -Wno-unused-function -Wno-unused-const-variable -Wno-unneeded-internal-declaration -Wno-unused-private-field -Wno-format-security"
