@@ -6,6 +6,7 @@ script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)"
 repo_dir="$(git rev-parse --show-toplevel)"
 
 export CMAKE_BUILD_PARALLEL_LEVEL="$("${script_dir}/nproc")"
+export MAKEFLAGS="-j${CMAKE_BUILD_PARALLEL_LEVEL}"
 
 for target_name in "${@}"
 do
