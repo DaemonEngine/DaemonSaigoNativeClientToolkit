@@ -185,7 +185,7 @@ macro(AddDirectoryAliases targetName toolNames)
 
 		add_custom_target(${aliasName}-bin-directory
 			ALL
-			COMMAND ln -sfT ../${referenceName}/bin ${aliasPath}/bin
+			COMMAND ln -sfn ../${referenceName}/bin ${aliasPath}/bin
 			DEPENDS ${aliasName}-directory
 		)
 
@@ -201,7 +201,7 @@ macro(AddDirectoryAliases targetName toolNames)
 
 		add_custom_target(${aliasName}-ldscripts-directory
 			ALL
-			COMMAND ln -sfT ../../${referenceName}/lib/ldscripts ${aliasPath}/lib/ldscripts
+			COMMAND ln -sfn ../../${referenceName}/lib/ldscripts ${aliasPath}/lib/ldscripts
 			DEPENDS ${aliasName}-lib-directory
 		)
 
