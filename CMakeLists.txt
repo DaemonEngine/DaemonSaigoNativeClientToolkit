@@ -68,14 +68,6 @@ macro(AddProject SLUG NAME DIR URL TAG)
 	set(REPOSITORY_DIR_${SLUG} ${DIR})
 	set(REPOSITORY_TAG_${SLUG} ${TAG})
 
-	if (SHARED_REPOSITORIES_DIR)
-		set(REPOSITORY_${SLUG} ${SHARED_REPOSITORIES_DIR}/${DIR})
-	else()
-		set(REPOSITORY_${SLUG} ${GIT_REPOSITORY_${SLUG}})
-	endif()
-
-	set(SOURCE_DIR_${SLUG} ${EXTERNAL_PROJECT_SOURCES_DIR}/${DIR})
-
 	if (CLONE_SHARED_REPOSITORIES)
 		option(CLONE_${SLUG} "Clone the ${NAME} repository." ON)
 
@@ -91,6 +83,23 @@ macro(AddProject SLUG NAME DIR URL TAG)
 		endif()
 	else()
 		option(BUILD_${SLUG} "Build the ${NAME}." ON)
+	endif()
+
+	if (SHARED_REPOSITORIES_DIR)
+		set(SOURCE_DIR_${SLUG} ${SHARED_REPOSITORIES_DIR}/${DIR})
+
+		set(EP_OPTIONS_${SLUG}
+			SOURCE_DIR "${SOURCE_DIR_${SLUG}}"
+		)
+	else()
+		set(SOURCE_DIR_${SLUG} ${EXTERNAL_PROJECT_SOURCES_DIR}/${DIR})
+		set(REPOSITORY_${SLUG} ${GIT_REPOSITORY_${SLUG}})
+
+		set(EP_OPTIONS_${SLUG}
+			SOURCE_DIR "${SOURCE_DIR_${SLUG}}"
+			GIT_REPOSITORY "${REPOSITORY_${SLUG}}"
+			GIT_TAG "${REPOSITORY_TAG_${SLUG}}"
+		)
 	endif()
 endmacro()
 
@@ -254,9 +263,7 @@ if (BUILD_CLANG)
 	endif()
 
 	ExternalProject_Add(clang-binaries
-		SOURCE_DIR "${SOURCE_DIR_CLANG}"
-		GIT_REPOSITORY "${REPOSITORY_CLANG}"
-		GIT_TAG "${REPOSITORY_TAG_CLANG}"
+		${EP_OPTIONS_CLANG}
 		SOURCE_SUBDIR llvm
 		LIST_SEPARATOR |
 		CMAKE_ARGS "-DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}"
@@ -308,10 +315,8 @@ if (BUILD_BINUTILS)
 	endif()
 
 	ExternalProject_Add(binutils-binaries
-		SOURCE_DIR "${SOURCE_DIR_BINUTILS}"
-		GIT_REPOSITORY "${REPOSITORY_BINUTILS}"
-		GIT_TAG "${REPOSITORY_TAG_BINUTILS}"
-		CONFIGURE_COMMAND "${CMAKE_CURRENT_BINARY_DIR}/${SOURCE_DIR_BINUTILS}/configure"
+		${EP_OPTIONS_BINUTILS}
+		CONFIGURE_COMMAND "${SOURCE_DIR_BINUTILS}/configure"
 		CONFIGURE_COMMAND "MAKEINFO=true"
 		CONFIGURE_COMMAND "CC=${CONFIGURE_CC}"
 		CONFIGURE_COMMAND "CFLAGS=${COMPILER_FLAGS} -Wno-absolute-value -Wno-unused-function -Wno-unused-const-variable -Wno-unneeded-internal-declaration -Wno-unused-private-field -Wno-format-security"
