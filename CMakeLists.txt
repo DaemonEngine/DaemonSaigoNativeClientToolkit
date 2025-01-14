@@ -303,6 +303,10 @@ endif()
 if (BUILD_BINUTILS)
 	add_custom_target(binutils ALL)
 
+	if (MINGW OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
+		set(STATIC_LIBGCC "-static-libgcc")
+	endif()
+
 	ExternalProject_Add(binutils-binaries
 		SOURCE_DIR "${SOURCE_DIR_BINUTILS}"
 		GIT_REPOSITORY "${REPOSITORY_BINUTILS}"
@@ -311,7 +315,7 @@ if (BUILD_BINUTILS)
 		CONFIGURE_COMMAND "MAKEINFO=true"
 		CONFIGURE_COMMAND "CC=${CONFIGURE_CC}"
 		CONFIGURE_COMMAND "CFLAGS=${COMPILER_FLAGS} -Wno-absolute-value -Wno-unused-function -Wno-unused-const-variable -Wno-unneeded-internal-declaration -Wno-unused-private-field -Wno-format-security"
-		CONFIGURE_COMMAND "LDFLAGS=${LINKER_FLAGS} -static-libstdc++ -static-libgcc"
+		CONFIGURE_COMMAND "LDFLAGS=${LINKER_FLAGS} -static-libstdc++ ${STATIC_LIBGCC}"
 		CONFIGURE_COMMAND ${CONFIGURE_ARG_LTO}
 		CONFIGURE_COMMAND --prefix=
 		CONFIGURE_COMMAND --target=x86_64-nacl
