@@ -7,6 +7,18 @@ include(${CMAKE_ROOT}/Modules/ExternalProject.cmake)
 
 project(SaigoNativeClientToolchain)
 
+execute_process(
+	COMMAND "${CMAKE_C_COMPILER}" -dumpmachine
+	OUTPUT_VARIABLE TRIPLE_HOST
+	OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+
+execute_process(
+	COMMAND cc -dumpmachine
+	OUTPUT_VARIABLE TRIPLE_BUILD
+	OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 	set(CMAKE_INSTALL_PREFIX "${CMAKE_CURRENT_BINARY_DIR}/prefix" CACHE PATH "Install path prefix, prepended onto install directories." FORCE)
 endif ()
@@ -26,10 +38,6 @@ endif()
 
 if (USE_CCACHE)
 	set(CCACHE_CMD "ccache")
-endif()
-
-if (CONFIGURE_HOST)
-	set(CONFIGURE_ARG_HOST "--host=${CONFIGURE_HOST}")
 endif()
 
 if (USE_CCACHE)
@@ -314,6 +322,11 @@ if (BUILD_BINUTILS)
 		set(STATIC_LIBGCC "-static-libgcc")
 	endif()
 
+	if (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+		set(CONFIGURE_ARG_BUILD "--build=${TRIPLE_BUILD}")
+		set(INSTALL_ARG_STRIP "STRIPPROG=${TRIPLE_HOST}-strip")
+	endif()
+
 	ExternalProject_Add(binutils-binaries
 		${EP_OPTIONS_BINUTILS}
 		CONFIGURE_COMMAND "${SOURCE_DIR_BINUTILS}/configure"
@@ -322,9 +335,10 @@ if (BUILD_BINUTILS)
 		CONFIGURE_COMMAND "CFLAGS=${COMPILER_FLAGS} -Wno-absolute-value -Wno-unused-function -Wno-unused-const-variable -Wno-unneeded-internal-declaration -Wno-unused-private-field -Wno-format-security"
 		CONFIGURE_COMMAND "LDFLAGS=${LINKER_FLAGS} -static-libstdc++ ${STATIC_LIBGCC}"
 		CONFIGURE_COMMAND ${CONFIGURE_ARG_LTO}
+		CONFIGURE_COMMAND "${CONFIGURE_ARG_BUILD}"
 		CONFIGURE_COMMAND --prefix=
+		CONFIGURE_COMMAND "--host=${TRIPLE_HOST}"
 		CONFIGURE_COMMAND --target=x86_64-nacl
-		CONFIGURE_COMMAND ${CONFIGURE_ARG_HOST}
 		CONFIGURE_COMMAND --enable-targets=x86_64-nacl,i686-nacl,arm-nacl
 		# CONFIGURE_COMMAND --enable-gold --enable-plugins --disable-shared
 		CONFIGURE_COMMAND --disable-gold
@@ -332,10 +346,13 @@ if (BUILD_BINUTILS)
 		CONFIGURE_COMMAND --without-zlib
 		CONFIGURE_COMMAND --disable-silent-rules
 		CONFIGURE_COMMAND --enable-deterministic-archives
-		BUILD_COMMAND $(MAKE) MAKEINFO=true
-		INSTALL_COMMAND $(MAKE) MAKEINFO=true
-		INSTALL_COMMAND install-strip
+		BUILD_COMMAND $(MAKE)
+		BUILD_COMMAND MAKEINFO=true
+		INSTALL_COMMAND $(MAKE)
+		INSTALL_COMMAND MAKEINFO=true
+		INSTALL_COMMAND "${INSTALL_ARG_STRIP}"
 		INSTALL_COMMAND DESTDIR=${CMAKE_INSTALL_PREFIX}
+		INSTALL_COMMAND install-strip
 	)
 
 	set(binutilsToolNames addr2line;ar;as;c++filt;elfedit;gprof;nm;objcopy;objdump;ranlib;readelf;size;strings;strip;ld;ld.bfd) # ld.gold

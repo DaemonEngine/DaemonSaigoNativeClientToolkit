@@ -1,7 +1,6 @@
 # Target operating system and architecture
 set( CMAKE_SYSTEM_NAME Windows )
 set( CMAKE_SYSTEM_PROCESSOR x86 )
-set( CONFIGURE_HOST i686-w64-mingw32 )
 
 # C/C++ compilers
 set( CMAKE_C_COMPILER i686-w64-mingw32-gcc )
