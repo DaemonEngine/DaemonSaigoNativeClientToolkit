@@ -19,6 +19,16 @@ do
 
 	cmake_args=(-S "${repo_dir}" -G'Unix Makefiles')
 
+	if [ -n "${CMAKE_DEBUG:-}" ]
+	then
+		cmake_args+=(--debug-output)
+	fi
+
+	if [ -n "${CMAKE_TRACE:-}" ]
+	then
+		cmake_args+=(--trace)
+	fi
+
 	shared_dir="${repo_dir}/build/shared"
 
 	if [ ! -d "${shared_dir}" ]
