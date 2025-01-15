@@ -9,8 +9,11 @@ include(ExternalProject)
 
 project(SaigoNativeClientToolchain)
 
+set(FLAGS_LIST "${CMAKE_C_FLAGS}")
+separate_arguments(FLAGS_LIST)
+
 execute_process(
-	COMMAND "${CMAKE_C_COMPILER}" -dumpmachine
+	COMMAND "${CMAKE_C_COMPILER}" ${FLAGS_LIST} -dumpmachine
 	OUTPUT_VARIABLE TRIPLE_HOST
 	OUTPUT_STRIP_TRAILING_WHITESPACE
 )
@@ -365,6 +368,34 @@ if (BUILD_CLANG)
 	AddBinaryAliases(clang "${clangToolNames}")
 endif()
 
+macro(addConfigureEnv NAME VALUE)
+	set(CONFIGURE_ENV ${CONFIGURE_ENV} "${NAME}=${VALUE}")
+endmacro()
+
+macro(addBinutilEnv NAME PATH)
+	set(TRIPLE_${NAME} "${TRIPLE_HOST}-${PATH}")
+
+	find_program(PATH_TRIPLE_${NAME} NAMES "${TRIPLE_${NAME}}")
+
+	if (PATH_TRIPLE_${NAME})
+		set(BINUTIL_${NAME} "${TRIPLE_${NAME}}")
+	else ()
+		set(BINUTIL_${NAME} "${PATH}")
+		addConfigureEnv("${NAME}" "${PATH}")
+	endif()
+endmacro()
+
+addBinutilEnv("AR" "ar")
+addBinutilEnv("NM" "nm")
+addBinutilEnv("OBJDUMP" "objdump")
+addBinutilEnv("RANLIB" "ranlib")
+addBinutilEnv("STRIP" "strip")
+
+addConfigureEnv("CC" "${EP_C_COMPILER}")
+addConfigureEnv("CC_FOR_BUILD" "cc")
+addConfigureEnv("MAKEINFO" "true")
+addConfigureEnv("STRIPPROG" "${BINUTIL_STRIP}")
+
 if (BUILD_BINUTILS)
 	add_custom_target(binutils ALL)
 
@@ -372,21 +403,14 @@ if (BUILD_BINUTILS)
 		set(STATIC_LIBGCC "-static-libstdc++ -static-libgcc")
 	endif()
 
-	if (CMAKE_SYSTEM_NAME STREQUAL "Linux" OR MINGW)
-		set(CONFIGURE_ARG_BUILD "--build=${TRIPLE_BUILD}")
-		set(CONFIGURE_ARG_HOST "--host=${TRIPLE_HOST}")
-		set(INSTALL_ARG_STRIP "STRIPPROG=${TRIPLE_HOST}-strip")
-	endif()
-
 	ExternalProject_Add(binutils-binaries
 		${EP_OPTIONS_BINUTILS}
 		CONFIGURE_COMMAND "${SOURCE_DIR_BINUTILS}/configure"
-		CONFIGURE_COMMAND "MAKEINFO=true"
-		CONFIGURE_COMMAND "CC=${EP_C_COMPILER}"
+		CONFIGURE_COMMAND ${CONFIGURE_ENV}
 		CONFIGURE_COMMAND "CFLAGS=${EP_C_FLAGS} -Wno-absolute-value -Wno-unused-function -Wno-unused-const-variable -Wno-unneeded-internal-declaration -Wno-unused-private-field -Wno-format-security"
 		CONFIGURE_COMMAND "LDFLAGS=${EP_EXE_LINKER_FLAGS} ${STATIC_LIBGCC}"
-		CONFIGURE_COMMAND ${CONFIGURE_ARG_BUILD}
-		CONFIGURE_COMMAND ${CONFIGURE_ARG_HOST}
+		CONFIGURE_COMMAND "--build=${TRIPLE_BUILD}"
+		CONFIGURE_COMMAND "--host=${TRIPLE_HOST}"
 		CONFIGURE_COMMAND "--target=${TRIPLE_TARGET}"
 		CONFIGURE_COMMAND "--enable-targets=x86_64-nacl,i686-nacl,arm-nacl"
 		CONFIGURE_COMMAND --prefix=
@@ -397,10 +421,9 @@ if (BUILD_BINUTILS)
 		CONFIGURE_COMMAND --disable-silent-rules
 		CONFIGURE_COMMAND --enable-deterministic-archives
 		BUILD_COMMAND $(MAKE)
-		BUILD_COMMAND "MAKEINFO=true"
+		BUILD_COMMAND ${CONFIGURE_ENV}
 		INSTALL_COMMAND $(MAKE)
-		INSTALL_COMMAND "MAKEINFO=true"
-		INSTALL_COMMAND ${INSTALL_ARG_STRIP}
+		INSTALL_COMMAND ${CONFIGURE_ENV}
 		INSTALL_COMMAND "DESTDIR=${CMAKE_INSTALL_PREFIX}"
 		INSTALL_COMMAND install-strip
 	)
