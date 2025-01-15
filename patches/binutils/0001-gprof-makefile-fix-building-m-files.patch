@@ -1,0 +1,34 @@
+From 6cf6b07ef15700f311837f5f21f508c8c18fa7c5 Mon Sep 17 00:00:00 2001
+From: Thomas Debesse <dev@illwieckz.net>
+Date: Wed, 15 Jan 2025 14:43:04 +0100
+Subject: [PATCH] gprof/makefile: fix building m files
+
+---
+ gprof/Makefile.in | 4 +++-
+ 1 file changed, 3 insertions(+), 1 deletion(-)
+
+diff --git a/gprof/Makefile.in b/gprof/Makefile.in
+index 3a5bcdc559..9fdf7d15d1 100644
+--- a/gprof/Makefile.in
++++ b/gprof/Makefile.in
+@@ -345,7 +345,7 @@ all: $(BUILT_SOURCES) gconfig.h
+ 	$(MAKE) $(AM_MAKEFLAGS) all-recursive
+ 
+ .SUFFIXES:
+-.SUFFIXES: .m .c .dvi .lo .o .obj .ps
++.SUFFIXES: .c .dvi .lo .o .obj .ps
+ am--refresh:
+ 	@:
+ $(srcdir)/Makefile.in: @MAINTAINER_MODE_TRUE@ $(srcdir)/Makefile.am  $(am__configure_deps)
+@@ -1038,6 +1038,8 @@ uninstall-man: uninstall-man1
+ 
+ diststuff: $(BUILT_SOURCES) info $(man_MANS)
+ 
++.SUFFIXES: .m
++
+ # This empty rule is a hack against gmake patched by Apple.
+ %.o:%.m
+ 
+-- 
+2.43.0
+
