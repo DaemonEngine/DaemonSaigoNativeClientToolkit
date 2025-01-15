@@ -41,6 +41,16 @@ do
 
 	. "${conf_file}"
 
+	if [ -n "${USE_CCACHE:-}" ]
+	then
+		cmake_args+=(-D'USE_CCACHE'="${USE_CCACHE}")
+	fi
+
+	if [ -n "${USE_LTO:-}" ]
+	then
+		cmake_args+=(-D'USE_LTO'="${USE_LTO}")
+	fi
+
 	if [ -n "${TOOLCHAIN:-}" ]
 	then
 		cmake_args+=(-D'CMAKE_TOOLCHAIN_FILE'="${repo_dir}/cmake/${TOOLCHAIN}")

@@ -3,7 +3,9 @@
 
 cmake_minimum_required(VERSION 3.10)
 
-include(${CMAKE_ROOT}/Modules/ExternalProject.cmake)
+include(CheckCompilerFlag)
+include(CheckLinkerFlag)
+include(ExternalProject)
 
 project(SaigoNativeClientToolchain)
 
@@ -27,30 +29,76 @@ endif ()
 
 get_property(CMAKE_BUILD_TYPE_HELP CACHE CMAKE_BUILD_TYPE PROPERTY HELPSTRING)
 set(CMAKE_BUILD_TYPE "Release" CACHE STRING "${CMAKE_BUILD_TYPE_HELP}" FORCE)
-set(COMPILER_FLAGS "-O3")
+set(CONFIGURE_COMPILER_FLAGS "-O3")
 
-find_program(FOUND_CCACHE NAMES "ccache")
+find_program(PATH_CCACHE NAMES "ccache")
+find_program(PATH_NINJA NAMES "ninja")
+find_program(PATH_MOLD NAMES "mold")
 
-option(USE_CCACHE "Enable cached compilation." FOUND_CCACHE)
-option(USE_LTO "Enable link-time optimization." ON)
+macro(FindTool SLUG FILE NAME)
+	find_program(PATH_${SLUG} NAMES ${FILE})
 
-if (USE_LTO)
-	set(CONFIGURE_ARG_LTO --enable-lto)
-endif()
+	if (PATH_${SLUG})
+		set(FOUND_${SLUG} ON)
+	endif()
+
+	option(USE_${SLUG} "Enable ${NAME} when possible." ${FOUND_${SLUG}})
+endmacro()
+
+FindTool("CCACHE" "ccache" "ccache compiler cache")
+FindTool("NINJA" "ninja" "ninja builder")
+FindTool("MOLD" "mold" "mold linker")
 
 if (USE_CCACHE)
-	set(CCACHE_CMD "ccache")
-endif()
-
-if (USE_CCACHE)
-	set(CONFIGURE_CC "${CCACHE_CMD} ${CMAKE_C_COMPILER}")
+	# Options come from LLVM CMakeLists.txt file.
+	set(ENV${CCACHE_CPP2} "yes")
+	set(ENV${CCACHE_HASHDIR} "yes")
+	set(EP_COMPILER_LAUNCHER "ccache")
+	set(EP_C_COMPILER "${EP_COMPILER_LAUNCHER} ${CMAKE_C_COMPILER}")
+	set(EP_CXX_COMPILER "${EP_COMPILER_LAUNCHER} ${CMAKE_CXX_COMPILER}")
 else()
-	set(CONFIGURE_CC "${CMAKE_C_COMPILER}")
+	set(EP_C_COMPILER "${CMAKE_C_COMPILER}")
+	set(EP_CXX_COMPILER "${CMAKE_CXX_COMPILER}")
+endif()
+
+if (USE_NINJA)
+	set(EP_GENERATOR "Ninja")
+else()
+	set(EP_GENERATOR "${CMAKE_GENERATOR}")
+endif()
+
+if (USE_MOLD AND NOT MINGW)
+	set(MOLD_FLAG "-fuse-ld=mold")
+	check_linker_flag("C" ${MOLD_FLAG} FUSE_LD_MOLD)
+
+	if (FUSE_LD_MOLD)
+		set(COMPILER_FLAGS "${COMPILER_FLAGS} ${MOLD_FLAG}")
+		set(EXE_LINKER_FLAGS "${EXE_LINKER_FLAGS} ${MOLD_FLAG}")
+	endif()
 endif()
 
 if (CMAKE_OSX_DEPLOYMENT_TARGET)
 	set(COMPILER_FLAGS "${COMPILER_FLAGS} -mmacosx-version-min=${CMAKE_OSX_DEPLOYMENT_TARGET}")
 endif()
+
+check_compiler_flag("C" "-mllvm --color" COMPILER_CLANG)
+
+option(USE_LTO "Enable link-time optimization." ON)
+
+if (USE_LTO AND NOT MINGW)
+	if (COMPILER_CLANG)
+		set(COMPILER_FLAGS "${COMPILER_FLAGS} -flto=thin -fno-fat-lto-objects")
+	else()
+		set(COMPILER_FLAGS "${COMPILER_FLAGS} -flto -fno-fat-lto-objects")
+	endif()
+
+	set(EXE_LINKER_FLAGS "${EXE_LINKER_FLAGS} ${COMPILER_FLAGS}")
+	set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${CMAKE_C_FLAGS}")
+endif()
+
+set(EP_C_FLAGS "${CMAKE_C_FLAGS} ${COMPILER_FLAGS}")
+set(EP_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${COMPILER_FLAGS}")
+set(EP_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${EXE_LINKER_FLAGS}")
 
 option(CLONE_SHARED_REPOSITORIES "Clone shared sources dir (and only do that)." OFF)
 
@@ -251,21 +299,10 @@ endmacro()
 if (BUILD_CLANG)
 	add_custom_target(clang ALL)
 
-	set(INSTALL_RPATH "@executable_path/../lib")
-
 	if (APPLE)
 		set(INSTALL_RPATH "$ORIGIN/../lib")
-	endif()
-
-	set(USE_IPO ON)
-	set(USE_LTO OFF)
-
-	if (MINGW)
-		set(USE_IPO OFF)
-		set(USE_LTO OFF)
-	elseif (CMAKE_C_COMPILER_ID STREQUAL "Clang" OR CMAKE_C_COMPILER_ID STREQUAL "AppleClang")
-		set(USE_IPO OFF)
-		set(USE_LTO Thin)
+	else()
+		set(INSTALL_RPATH "@executable_path/../lib")
 	endif()
 
 	if (CMAKE_OSX_DEPLOYMENT_TARGET)
@@ -284,12 +321,18 @@ if (BUILD_CLANG)
 		${EP_OPTIONS_CLANG}
 		SOURCE_SUBDIR llvm
 		LIST_SEPARATOR |
+		CMAKE_GENERATOR ${EP_GENERATOR}
 		CMAKE_ARGS "${CMAKE_ARG_CROSS}"
+		CMAKE_ARGS "-DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}"
 		CMAKE_ARGS "-DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}"
+		CMAKE_ARGS "-DCMAKE_INSTALL_RPATH=${INSTALL_RPATH}"
+		CMAKE_ARGS "-DCMAKE_C_COMPILER_LAUNCHER=${EP_COMPILER_LAUNCHER}"
+		CMAKE_ARGS "-DCMAKE_CXX_COMPILER_LAUNCHER=${EP_COMPILER_LAUNCHER}"
 		CMAKE_ARGS "-DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}"
 		CMAKE_ARGS "-DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER}"
-		CMAKE_ARGS "-DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}"
-		CMAKE_ARGS "-DCMAKE_INSTALL_RPATH=${INSTALL_RPATH}"
+		CMAKE_ARGS "-DCMAKE_C_FLAGS=${EP_C_FLAGS}"
+		CMAKE_ARGS "-DCMAKE_CXX_FLAGS=${EP_CXX_FLAGS}"
+		CMAKE_ARGS "-DCMAKE_EXE_LINKER_FLAGS=${EP_EXE_LINKER_FLAGS}"
 		CMAKE_ARGS -DLLVM_INSTALL_TOOLCHAIN_ONLY=ON
 		CMAKE_ARGS -DLLVM_APPEND_VC_REV=ON
 		CMAKE_ARGS -DLLVM_BUILD_TESTS=OFF
@@ -307,15 +350,11 @@ if (BUILD_CLANG)
 		CMAKE_ARGS -DLLVM_BUILD_LLVM_DYLIB=OFF
 		CMAKE_ARGS -DLLVM_LINK_LLVM_DYLIB=OFF
 		CMAKE_ARGS -DCLANG_LINK_CLANG_DYLIB=OFF
-		CMAKE_ARGS -DLLVM_CCACHE_BUILD=OFF
 		# CMAKE_ARGS -DLLVM_ENABLE_TERMINFO=OFF
 		CMAKE_ARGS -DLLVM_ENABLE_RUNTIMES=
 		CMAKE_ARGS -DCLANG_INCLUDE_DOCS=OFF
 		CMAKE_ARGS -DCLANG_INCLUDE_TESTS=OFF
-		CMAKE_ARGS -DLLVM_CCACHE_BUILD=${USE_CCACHE}
 		CMAKE_ARGS -DLLVM_USE_SYMLINKS=ON
-		CMAKE_ARGS -DLLVM_ENABLE_LTO=${USE_LTO}
-		CMAKE_ARGS -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=${USE_IPO}
 		CMAKE_ARGS ${CMAKE_EXTRA_ARGS}
 		INSTALL_COMMAND ${CMAKE_COMMAND} --install . --strip
 	)
@@ -329,8 +368,8 @@ endif()
 if (BUILD_BINUTILS)
 	add_custom_target(binutils ALL)
 
-	if (MINGW OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
-		set(STATIC_LIBGCC "-static-libgcc")
+	if (NOT COMPILER_CLANG)
+		set(STATIC_LIBGCC "-static-libstdc++ -static-libgcc")
 	endif()
 
 	if (CMAKE_SYSTEM_NAME STREQUAL "Linux" OR MINGW)
@@ -343,15 +382,14 @@ if (BUILD_BINUTILS)
 		${EP_OPTIONS_BINUTILS}
 		CONFIGURE_COMMAND "${SOURCE_DIR_BINUTILS}/configure"
 		CONFIGURE_COMMAND "MAKEINFO=true"
-		CONFIGURE_COMMAND "CC=${CONFIGURE_CC}"
-		CONFIGURE_COMMAND "CFLAGS=${COMPILER_FLAGS} -Wno-absolute-value -Wno-unused-function -Wno-unused-const-variable -Wno-unneeded-internal-declaration -Wno-unused-private-field -Wno-format-security"
-		CONFIGURE_COMMAND "LDFLAGS=${LINKER_FLAGS} -static-libstdc++ ${STATIC_LIBGCC}"
-		CONFIGURE_COMMAND "${CONFIGURE_ARG_LTO}"
-		CONFIGURE_COMMAND "${CONFIGURE_ARG_BUILD}"
-		CONFIGURE_COMMAND "${CONFIGURE_ARG_HOST}"
-		CONFIGURE_COMMAND --prefix=
+		CONFIGURE_COMMAND "CC=${EP_C_COMPILER}"
+		CONFIGURE_COMMAND "CFLAGS=${EP_C_FLAGS} -Wno-absolute-value -Wno-unused-function -Wno-unused-const-variable -Wno-unneeded-internal-declaration -Wno-unused-private-field -Wno-format-security"
+		CONFIGURE_COMMAND "LDFLAGS=${EP_EXE_LINKER_FLAGS} ${STATIC_LIBGCC}"
+		CONFIGURE_COMMAND ${CONFIGURE_ARG_BUILD}
+		CONFIGURE_COMMAND ${CONFIGURE_ARG_HOST}
 		CONFIGURE_COMMAND "--target=${TRIPLE_TARGET}"
-		CONFIGURE_COMMAND --enable-targets=x86_64-nacl,i686-nacl,arm-nacl
+		CONFIGURE_COMMAND "--enable-targets=x86_64-nacl,i686-nacl,arm-nacl"
+		CONFIGURE_COMMAND --prefix=
 		# CONFIGURE_COMMAND --enable-gold --enable-plugins --disable-shared
 		CONFIGURE_COMMAND --disable-gold
 		CONFIGURE_COMMAND --disable-werror
@@ -359,11 +397,11 @@ if (BUILD_BINUTILS)
 		CONFIGURE_COMMAND --disable-silent-rules
 		CONFIGURE_COMMAND --enable-deterministic-archives
 		BUILD_COMMAND $(MAKE)
-		BUILD_COMMAND MAKEINFO=true
+		BUILD_COMMAND "MAKEINFO=true"
 		INSTALL_COMMAND $(MAKE)
-		INSTALL_COMMAND MAKEINFO=true
+		INSTALL_COMMAND "MAKEINFO=true"
 		INSTALL_COMMAND ${INSTALL_ARG_STRIP}
-		INSTALL_COMMAND DESTDIR=${CMAKE_INSTALL_PREFIX}
+		INSTALL_COMMAND "DESTDIR=${CMAKE_INSTALL_PREFIX}"
 		INSTALL_COMMAND install-strip
 	)
 
