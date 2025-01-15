@@ -2,6 +2,24 @@
 
 Saigo is a new toolchain for compiling Native Client applications, Native Client was publicly abandonned by Google in 2020 in favor of WebAssembly, but Google silently continued development in the form of a new toolchain named Saigo. This project is to make possible to rebuild Native Client compilers and loaders for usage with the [Dæmon game engine](https://github.com/DaemonEngine/Daemon).
 
+## Status
+
+It is now possible to rebuild the toolchain binaries (the NaCl Saigo Clang and related binutils), and to do it for more platforms than initially supported by Google. The toolchain binaries have been successfully built for:
+
+||Linux|Windows|macOS|FreeBSD
+-|-|-|-|-
+amd64|✅️|✅️|✅️|✅️
+i686|✅️|✅️|
+arm64|✅️||✅️
+armhf|✅️
+
+Windows build is meant to be cross-compiled on Linux using MinGW.
+
+The libc and libc++ aren't installed yet so the toolchain isn't usable yet.
+
+The toolchain being buildable for some platforms only means it's possible to run the toolchain on those platforms to produce Native Client executables (nexe), it doesn't mean those Native Client executable can run on those platform. Running Native Client executables on new platforms would require new code in both the toolchain and the loader and it is not planned.
+
+On platforms that can run the loader under some compatibility mode (like running 32-bit loader on 64-bit environment, or macOS running amd64 loader through Rosetta 2 on arm64, or FreeBSD running the Linux loader on Linuxulator, it means it makes possible to have a fully native toolchain to produce NaCl binaries (once the required libc and libc++ are installed too).
 
 ## How-to
 
@@ -16,6 +34,7 @@ A compiler toolchain can then be found in `build/prefix`.
 The binutils build relies on autotools and GNU Make, so `gmake` has to be used instead of `make` on BSD systems.
 
 Replace 32 with the amount of cores your computer provides. Rebuilding Clang requires a powerful computer (or very slow compilation is expected).
+
 
 ## History
 
@@ -40,7 +59,7 @@ For the nexe libc and libc++, this project aims to repackage the Google pre-comp
 
 Contributions making possible to fully rebuild the libc without any Google-provided binaries is welcome, though, but not as prioritary as providing a fully-rebuildable NaCl compiler toolchain environment.
 
-Rebuilding the NaCl loader too is planned.
+Rebuilding the NaCl loader is investigated (don't hold your breath).
 
 
 ## Supported nexe target platforms
