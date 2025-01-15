@@ -122,6 +122,12 @@ else()
 	set(EXTERNAL_PROJECT_SOURCES_DIR ${EXTERNAL_PROJECT_BASE}/Sources)
 endif()
 
+set(PATCH_BINUTILS
+	git reset --hard origin/main
+	&& git am ${CMAKE_SOURCE_DIR}/patches/binutils/0001-gprof-makefile-fix-building-m-files.patch
+	&& git rebase --committer-date-is-author-date origin/main
+)
+
 macro(AddProject SLUG NAME DIR URL TAG)
 	set(GIT_REPOSITORY_${SLUG} ${URL} CACHE STRING "${NAME} git repository location.")
 	mark_as_advanced(GIT_REPOSITORY_${SLANG})
@@ -137,6 +143,7 @@ macro(AddProject SLUG NAME DIR URL TAG)
 				SOURCE_DIR ${DIR}
 				GIT_REPOSITORY ${GIT_REPOSITORY_${SLUG}}
 				GIT_TAG ${TAG}
+				PATCH_COMMAND ${PATCH_${SLUG}}
 				CONFIGURE_COMMAND echo
 				BUILD_COMMAND echo
 				INSTALL_COMMAND echo
@@ -161,6 +168,7 @@ macro(AddProject SLUG NAME DIR URL TAG)
 			SOURCE_DIR "${EP_SOURCE_DIR_${SLUG}}"
 			GIT_REPOSITORY "${REPOSITORY_${SLUG}}"
 			GIT_TAG "${REPOSITORY_TAG_${SLUG}}"
+			PATCH_COMMAND ${PATCH_${SLUG}}
 		)
 	endif()
 endmacro()
