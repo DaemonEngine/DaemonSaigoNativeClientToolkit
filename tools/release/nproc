@@ -3,7 +3,12 @@
 set -e -u -o pipefail
 
 default_job_count=4
-if command -v 'nproc' >/dev/null
+
+if [ -n "${JOBS:-}" ]
+then
+	echo "${JOBS}"
+	exit
+elif command -v 'nproc' >/dev/null
 then
 	nproc
 else
